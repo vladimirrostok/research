@@ -179,6 +179,13 @@ def fast_scroll(driver, scroll_times=10):
         # 🔹 If scrolling is stuck, force a page refresh
         if new_height == last_height:
             print("⚠️ Scrolling is stuck.")
+
+            driver.find_element(By.TAG_NAME, "body").send_keys(Keys.PAGE_UP)
+            time.sleep(1)
+            driver.find_element(By.TAG_NAME, "body").send_keys(Keys.PAGE_UP)
+            time.sleep(1)
+            driver.execute_script("window.scrollBy(0, document.body.scrollHeight);")
+
             #driver.refresh()
             #time.sleep(random.uniform(5, 10))
             #break  # Stop early to prevent infinite looping
@@ -220,13 +227,15 @@ def scrape_twitter(query, max_scrolls=10, save_every=10):
 
         # On every 5 scrolls, PAGE UP two times up and down, if the bot was blocked by rate limiter
         # This will auto-trigger the "Something went wrong.. Retry" button  
+        """
         if scroll_round % 5 == 0:
             driver.find_element(By.TAG_NAME, "body").send_keys(Keys.PAGE_UP)
             time.sleep(1)
             driver.find_element(By.TAG_NAME, "body").send_keys(Keys.PAGE_UP)
             time.sleep(1)
             driver.execute_script("window.scrollBy(0, document.body.scrollHeight);")
-            
+        """
+        
         # Run scrolling multiple random times before processing.
         fast_scroll(driver, scroll_times=random.randint(2, 5))  
 
