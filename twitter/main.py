@@ -25,10 +25,38 @@ os.makedirs(OUTPUT_DIRECTORY, exist_ok=True)
 # Configure Selenium to use your real browser
 def setup_driver():
     options = webdriver.ChromeOptions()
-    options.add_experimental_option("detach", True)  # Keep browser open
-    options.add_argument("--disable-blink-features=AutomationControlled")  # Bypass bot detection
+
+    # adding argument to disable the AutomationControlled flag to bypass bot detection
+    options.add_argument("--disable-blink-features=AutomationControlled") 
+    # exclude the collection of enable-automation switches 
+    options.add_experimental_option("excludeSwitches", ["enable-automation"]) 
+    # turn-off userAutomationExtension 
+    options.add_experimental_option("useAutomationExtension", False) 
+
+
+    
+    # Force Browser to Stay Active (Even When Minimized)
+    options.add_experimental_option("detach", True)  # Keep browser open after script ends to let us save the page with all content, or just see what was the end
+    # Prevents JavaScript execution from slowing down when window is in the background.
+    options.add_argument("--disable-background-timer-throttling")  # Prevent slowdowns in background
+    # Prevents Chrome from pausing when minimized.
+    options.add_argument("--disable-backgrounding-occluded-windows")  # Keep browser active even if minimized
+    # Ensures Selenium can still interact with the page when minimized.
+    options.add_argument("--disable-renderer-backgrounding")  # Prevent rendering freeze when in background
+    # Ensures proper rendering of UI elements.
+    options.add_argument("--force-device-scale-factor=1")  # Ensures proper rendering
+
     driver = webdriver.Chrome(options=options)
+
+    # changing the property of the navigator value for webdriver to undefined 
+    driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})") 
+
+    # Resize and reposition window to ensure visibility
+    driver.set_window_size(1200, 800)  # Set fixed size to maintain fixed consistent behavior, as UI adopts to screen size
+    driver.set_window_position(100, 100)  # Place it where you can see it
+
     return driver
+
 
 # 🔹 Auto-Login Function with Human-Like Delays & Dynamic Waiting
 def twitter_login(driver):
@@ -109,11 +137,37 @@ def scrape_twitter(query, max_scrolls=10, save_every=10):
     driver.get(search_url)
     time.sleep(random.uniform(3, 8))  # Wait for page to load
 
+
+    # TODO1:
+    # Periodically push PAGE UP two times, then script will gradually jump back to bottom of screen
+    # It will trigger the "Retry/Update page" action, and unblock the script itself.
+    # Probably it will start running fine in the headless mode as well, or at least resolve issue itself.
+    # NB, when scrolling is blocked, scrolling stops at the same position, meaning no data is lost as scrolling does not go through
+    # processing script will process tweets up to this moment, and then when scrolling unblocks it will get new data.
+    # we just have to unblock it when it's stuck, then it will auto resolve itself and continue...
+
+
+    # TODO2:
+    # Implement method to stop duplicating tweet id-s,
+    # Add topic or keyword search information somewhere. 
+
+    #
+
     tweets_data = []
     seen_tweet_ids = set()  # Avoid duplicates
     total_tweets_saved = 0  # Track total tweets saved
 
     for scroll_round in range(max_scrolls):
+
+        # On every 5 scrolls, PAGE UP two times up and down, if the bot was blocke by rate limiter
+        # This will auto-trigger the "Something went wrong.. Retry" button  
+        if scroll_round % 5 == 0:
+            driver.find_element(By.TAG_NAME, "body").send_keys(Keys.PAGE_DOWN)
+            time.sleep(1)
+            driver.find_element(By.TAG_NAME, "body").send_keys(Keys.PAGE_DOWN)
+            time.sleep(1)
+            driver.execute_script("window.scrollBy(0, document.body.scrollHeight);")
+
         # 🔹 Use fast JavaScript scrolling instead of slow key presses
         # Run scrolling multiple times before processing to optimize resource use.
         fast_scroll(driver, scroll_times=random.randint(2, 5))  
