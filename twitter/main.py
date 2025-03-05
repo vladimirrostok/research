@@ -251,7 +251,7 @@ def scrape_twitter(query, max_scrolls=10, save_every=10):
                 # 🔹 Extract Author's Username & Profile Link
                 try:
                     author_element = tweet.find_element(By.XPATH, './/a[@role="link"]')
-                    author_profile_link = "https://x.com" + author_element.get_attribute("href")
+                    author_profile_link = "https://x.com/" + author_element.get_attribute("href")
                     author_username = author_profile_link.split("/")[-1]  # Extract username from URL
                 except Exception as e:
                     print(f"⚠️ Could not extract author details: {e}")
