@@ -150,7 +150,7 @@ This function should run inside the scroll loop to automatically click "Retry" i
 def retry_button(driver):
     try:
         print("🔄 Attempting to press the retry button.")
-        retry_button = driver.find_element(By.XPATH, '//div[contains(text(), "Try again")]')
+        retry_button = driver.find_element(By.XPATH, '//div[contains(text(), "Retry")]')
         retry_button.click()
         time.sleep(random.uniform(1, 2))
     except:
