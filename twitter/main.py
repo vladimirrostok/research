@@ -146,16 +146,34 @@ def save_to_csv(tweets_data):
 
 This function should run inside the scroll loop to automatically click "Retry" if Twitter blocks actions.
 """
-"""
-def check_for_errors(driver):
+
+def retry_button(driver):
     try:
+        print("🔄 Attempting to press the retry button.")
         retry_button = driver.find_element(By.XPATH, '//div[contains(text(), "Try again")]')
         retry_button.click()
-        print("🔄 Auto-retrying after Twitter error.")
-        time.sleep(random.uniform(5, 10))
+        time.sleep(random.uniform(1, 2))
     except:
         pass  # No error, continue
-"""
+
+
+def smooth_scroll_unstuck(driver):
+    """ Gently scrolls up and down to simulate real scrolling, triggering Twitter's Retry button if stuck. """
+    print("🔄 Attempting to unstuck scrolling...")
+
+    try:
+        for i in range(5):  # Scroll up in small increments
+            driver.execute_script("window.scrollBy(0, -200);")  # Scroll up in small chunks
+            time.sleep(random.uniform(0.5, 1.2))  # Random delay between scrolls
+
+        for i in range(5):  # Scroll back down in small increments
+            driver.execute_script("window.scrollBy(0, 200);")  # Scroll down in small chunks
+            time.sleep(random.uniform(0.5, 1.2))
+
+        print("✅ Smooth scrolling completed.")
+
+    except Exception as e:
+        print(f"❌ Error in smooth scrolling: {e}")
 
 """
 Call this inside your scroll loop:
@@ -169,6 +187,7 @@ Currently, it only prints "Scrolling is stuck" but does not recover.
 Solution: Force refresh if stuck (this was commented out in your version).
 """
 def fast_scroll(driver, scroll_times=10):
+    """ Scrolls down while detecting if scrolling is stuck. If stuck, it triggers unstuck scrolling. """
     last_height = driver.execute_script("return document.body.scrollHeight")
 
     for _ in range(scroll_times):
@@ -176,15 +195,25 @@ def fast_scroll(driver, scroll_times=10):
         time.sleep(random.uniform(5, 25))  # Vary scroll timing
         new_height = driver.execute_script("return document.body.scrollHeight")
 
-        # 🔹 If scrolling is stuck, force a page refresh
+        # 🔹 If scrolling is stuck, trigger smooth unstuck scroll
         if new_height == last_height:
-            print("⚠️ Scrolling is stuck.")
+            print("⚠️ Scrolling is stuck. Triggering smooth scroll and retry button...")
+            smooth_scroll_unstuck(driver)  # Call our new function
+            # Try another fast scroll up after unstucking
+            driver.execute_script("window.scrollBy(0, document.body.scrollHeight);")
 
+            # also try to press the button after the scrolling
+            retry_button(driver)
+
+            # Hope in next iteration it will scroll down and repeat and fix it.
+
+            """
             driver.find_element(By.TAG_NAME, "body").send_keys(Keys.PAGE_UP)
             time.sleep(1)
             driver.find_element(By.TAG_NAME, "body").send_keys(Keys.PAGE_UP)
             time.sleep(1)
             driver.execute_script("window.scrollBy(0, document.body.scrollHeight);")
+            """
 
             #driver.refresh()
             #time.sleep(random.uniform(5, 10))
