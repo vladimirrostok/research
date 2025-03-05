@@ -158,23 +158,26 @@ def retry_button(driver):
 
 
 def smooth_scroll_unstuck(driver):
-    """ Gently scrolls up and down to simulate real scrolling, triggering Twitter's Retry button if stuck. """
-    print("🔄 Attempting to unstuck scrolling...")
+    """ Simulates real user scrolling by using actual mouse wheel events. """
+    print("🔄 Attempting to unstuck scrolling with real user input...")
 
     try:
-        for i in range(5):  # Scroll up in small increments
-            driver.execute_script("window.scrollBy(0, -200);")  # Scroll up in small chunks
-            time.sleep(random.uniform(0.5, 1.2))  # Random delay between scrolls
+        for _ in range(3):  # Scroll up slowly
+            pyautogui.scroll(300)  # Scroll UP (Positive Value)
+            time.sleep(random.uniform(1, 1.5))
 
-        for i in range(5):  # Scroll back down in small increments
-            driver.execute_script("window.scrollBy(0, 200);")  # Scroll down in small chunks
-            time.sleep(random.uniform(0.5, 1.2))
+        time.sleep(random.uniform(1, 3))  # Pause for UI refresh
 
-        print("✅ Smooth scrolling completed.")
+        for _ in range(3):  # Scroll back down slowly
+            pyautogui.scroll(-300)  # Scroll DOWN (Negative Value)
+            time.sleep(random.uniform(1, 1.5))
+
+        print("✅ Real mouse scroll completed.")
 
     except Exception as e:
-        print(f"❌ Error in smooth scrolling: {e}")
+        print(f"❌ Error in real scrolling: {e}")
 
+        
 """
 Call this inside your scroll loop:
 check_for_errors(driver)
