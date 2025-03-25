@@ -4,6 +4,7 @@ import random
 import pandas as pd
 import pyautogui
 import threading
+import re
 from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.support.ui import WebDriverWait
@@ -19,7 +20,7 @@ TWITTER_PASSWORD = ""
 # 🔹 Set the output directory to the script's execution folder
 SCRIPT_DIRECTORY = os.path.dirname(os.path.abspath(__file__))  # Gets the folder where the script is executed
 OUTPUT_DIRECTORY = os.path.join(SCRIPT_DIRECTORY, "TwitterScraperResults")
-OUTPUT_FILE = os.path.join(OUTPUT_DIRECTORY, "tweets.csv")
+OUTPUT_FILE = os.path.join(OUTPUT_DIRECTORY, "feed.csv")
 # Ensure the output directory exists
 os.makedirs(OUTPUT_DIRECTORY, exist_ok=True)
 
@@ -27,13 +28,10 @@ os.makedirs(OUTPUT_DIRECTORY, exist_ok=True)
 def setup_driver():
     options = webdriver.ChromeOptions()
     options.add_experimental_option("detach", True)  # Keep browser open after script ends to let us save the page with all content, or just see what was the end
-
-    # adding argument to disable the AutomationControlled flag to bypass bot detection
-    options.add_argument("--disable-blink-features=AutomationControlled") 
-    # exclude the collection of enable-automation switches 
-    options.add_experimental_option("excludeSwitches", ["enable-automation"]) 
-    # turn-off userAutomationExtension 
-    options.add_experimental_option("useAutomationExtension", False) 
+    
+    options.add_argument("--disable-blink-features=AutomationControlled") # adding argument to disable the AutomationControlled flag to bypass bot detection
+    options.add_experimental_option("excludeSwitches", ["enable-automation"]) # exclude the collection of enable-automation switches 
+    options.add_experimental_option("useAutomationExtension", False) # turn-off userAutomationExtension 
     
     # Force Browser to Stay Active (Even When Minimized)
     # Prevents JavaScript execution from slowing down when window is in the background.
@@ -53,31 +51,15 @@ def setup_driver():
     driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})") 
 
     # Resize and reposition window to ensure visibility
-    driver.set_window_size(1200, 800)  # Set fixed size to maintain fixed consistent behavior, as UI adopts to screen size
+    driver.set_window_size(1200, 1200)  # Set fixed size to maintain fixed consistent behavior, as UI adopts to screen size
     driver.set_window_position(100, 100)  # Place it where you can see it
 
     return driver
 
-"""
-Solution 3: Simulate User Interaction (Mouse Movements)
-Chrome pauses execution when idle. You can force it to stay active by sending fake mouse movements:
-Usage: Run this function in a separate thread to keep Chrome from pausing:
-"""
-
-"""
-1️⃣ keep_browser_active() does not exit cleanly if Chrome closes.
-
-If the browser crashes, the thread will run indefinitely, leading to errors.
-Solution: Modify the loop to exit if driver is closed.
-
-4️⃣ Fix thread management for keep_browser_active().
-
-Currently, the thread never stops, even when scraping completes.
-Solution: Ensure the thread terminates cleanly when the script finishes.
-"""
 def keep_browser_active(driver):
     while driver.service.is_connectable():  # Stop if driver quits
         try:
+            # move mouse to keep javascript active
             pyautogui.moveRel(1, 0, duration=0.1)
             pyautogui.moveRel(-1, 0, duration=0.1)
             time.sleep(10)
@@ -88,8 +70,8 @@ def keep_browser_active(driver):
 # 🔹 Auto-Login Function with Human-Like Delays & Dynamic Waiting
 def twitter_login(driver):
     driver.get("https://x.com/login")
-    time.sleep(random.uniform(5, 8))  # Simulating user delay
-    wait = WebDriverWait(driver, 15)  # Wait up to 15 seconds for elements
+    time.sleep(random.uniform(2, 4))  # Simulating user delay
+    wait = WebDriverWait(driver, 3)  # Wait up to 15 seconds for elements
 
     try:
         # Wait for Username Field
@@ -146,7 +128,6 @@ def save_to_csv(tweets_data):
 
 This function should run inside the scroll loop to automatically click "Retry" if Twitter blocks actions.
 """
-
 def retry_button(driver):
     try:
         print("🔄 Attempting to press the retry button.")
@@ -155,6 +136,93 @@ def retry_button(driver):
         time.sleep(random.uniform(1, 2))
     except:
         pass  # No error, continue
+
+
+def parse_metric_value(metric_text):
+    """
+    Converts metric text (like "8.4K") to integer values.
+    """
+    metric_text = metric_text.strip().replace(',', '')
+    multiplier = 1
+    if metric_text.endswith('K'):
+        multiplier = 1_000
+        metric_text = metric_text[:-1]
+    elif metric_text.endswith('M'):
+        multiplier = 1_000_000
+        metric_text = metric_text[:-1]
+    
+    try:
+        return int(float(metric_text) * multiplier)
+    except:
+        return 0
+
+def extract_tweet_metrics(tweet):
+    """
+    Extract numeric values for replies, reposts, likes, and views.
+    """
+    metrics = {"Replies": 0, "Reposts": 0, "Likes": 0, "Views": 0}
+    
+    try:
+        metrics_container = tweet.find_element(
+            By.XPATH, './/div[@role="group" and @aria-label]'
+        )
+        aria_label = metrics_container.get_attribute("aria-label")
+
+        metrics_patterns = {
+            "Replies": r'(\d[\d.,KkMm]*) replies?',
+            "Reposts": r'(\d[\d.,KkMm]*) reposts?',
+            "Likes": r'(\d[\d.,KkMm]*) likes?',
+            "Views": r'(\d[\d.,KkMm]*) views?'
+        }
+
+        for key, pattern in metrics_patterns.items():
+            match = re.search(pattern, aria_label, re.I)
+            if match:
+                metrics[key] = parse_metric_value(match.group(1))
+    except Exception as e:
+        print(f"⚠️ Error extracting tweet metrics: {e}")
+
+    return metrics
+
+def extract_video_urls(tweet):
+    video_urls = []
+    try:
+        videos = tweet.find_elements(By.XPATH, './/video')
+        for video in videos:
+            src = video.get_attribute("src")
+            if src and not src.startswith('blob:'):
+                # Directly accessible video URL
+                video_urls.append(src)
+            else:
+                # Twitter-hosted video using blob URLs; extract tweet URL instead
+                tweet_link_element = tweet.find_element(By.XPATH, './/a[contains(@href, "/status/")]')
+                tweet_url = tweet_link_element.get_attribute('href')
+                video_urls.append(tweet_url)  # URL of the tweet itself
+    except Exception as e:
+        print(f"⚠️ Error extracting video URLs: {e}")
+
+    return video_urls
+
+def click_following_tab(driver):
+    try:
+        wait = WebDriverWait(driver, 5)
+
+        # Wait for the "Following" tab to become visible and clickable
+        following_tab = wait.until(EC.element_to_be_clickable(
+            (By.XPATH, '//a[@href="/home" and .//span[text()="Following"]]'))
+        )
+        
+        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", following_tab)
+        time.sleep(random.uniform(1, 2))
+        
+        following_tab.click()
+        print("✅ Successfully clicked on 'Following' tab.")
+        
+        # Allow some time for the page to load tweets
+        time.sleep(random.uniform(3, 4))
+        
+    except Exception as e:
+        print(f"❌ Could not click 'Following' tab: {e}")
 
 
 def smooth_scroll_unstuck(driver):
@@ -178,60 +246,31 @@ def smooth_scroll_unstuck(driver):
         print(f"❌ Error in real scrolling: {e}")
 
         
-"""
-Call this inside your scroll loop:
-check_for_errors(driver)
-"""
-
-"""
-2️⃣ fast_scroll() needs a better stuck detection mechanism.
-
-Currently, it only prints "Scrolling is stuck" but does not recover.
-Solution: Force refresh if stuck (this was commented out in your version).
-"""
-def fast_scroll(driver, scroll_times=10):
-    """ Scrolls down while detecting if scrolling is stuck. If stuck, it triggers unstuck scrolling. """
+def scroll(driver, scroll_steps=50, step_size=500, delay=3):
     last_height = driver.execute_script("return document.body.scrollHeight")
-
-    for _ in range(scroll_times):
-        driver.execute_script("window.scrollBy(0, document.body.scrollHeight);")
-        time.sleep(random.uniform(5, 25))  # Vary scroll timing
+    for step in range(scroll_steps):
+        driver.execute_script(f"window.scrollBy(0, {step_size});")
+        time.sleep(delay + random.uniform(1, 3))  # Allow tweets to load
         new_height = driver.execute_script("return document.body.scrollHeight")
 
-        # 🔹 If scrolling is stuck, trigger smooth unstuck scroll
+        # If reached bottom, break
         if new_height == last_height:
-            print("⚠️ Scrolling is stuck. Triggering smooth scroll and retry button...")
-            smooth_scroll_unstuck(driver)  # Call our new function
-            # Try another fast scroll up after unstucking
-            driver.execute_script("window.scrollBy(0, document.body.scrollHeight);")
-
-            # also try to press the button after the scrolling
-            retry_button(driver)
-
-            # Hope in next iteration it will scroll down and repeat and fix it.
-
-            """
-            driver.find_element(By.TAG_NAME, "body").send_keys(Keys.PAGE_UP)
-            time.sleep(1)
-            driver.find_element(By.TAG_NAME, "body").send_keys(Keys.PAGE_UP)
-            time.sleep(1)
-            driver.execute_script("window.scrollBy(0, document.body.scrollHeight);")
-            """
-
-            #driver.refresh()
-            #time.sleep(random.uniform(5, 10))
-            #break  # Stop early to prevent infinite looping
+            print("🔚 Reached the end of the page or no new tweets loaded.")
+            break
         last_height = new_height
 
 # 🔹 Extract all tweet details with human-like scrolling behavior
-def scrape_twitter(query, max_scrolls=10, save_every=10):
+def scrape_twitter(query, max_scrolls=10, save_every=5):
     driver = setup_driver()
     twitter_login(driver) # 🔹 Log in to Twitter first
 
     # Open Twitter search page
-    search_url = f"https://x.com/search?q={query}&src=typed_query&f=live"
+    search_url = f"https://x.com/home"
     driver.get(search_url)
     time.sleep(random.uniform(3, 8))  # Wait for page to load
+
+    # 🔥 NEW STEP: Click on Following tab after login
+    click_following_tab(driver)
 
     # Start the function in a separate thread
     # Prevent javascript from sleeping by moving the mouse.
@@ -241,18 +280,6 @@ def scrape_twitter(query, max_scrolls=10, save_every=10):
     tweets_data = []
     seen_tweet_ids = set()  # Avoid duplicates
     total_tweets_saved = 0  # Track total tweets saved
-
-    # TODO1:
-    # Periodically push PAGE UP two times, then script will gradually jump back to bottom of screen
-    # It will trigger the "Retry/Update page" action, and unblock the script itself.
-    # Probably it will start running fine in the headless mode as well, or at least resolve issue itself.
-    # NB, when scrolling is blocked, scrolling stops at the same position, meaning no data is lost as scrolling does not go through
-    # processing script will process tweets up to this moment, and then when scrolling unblocks it will get new data.
-    # we just have to unblock it when it's stuck, then it will auto resolve itself and continue...
-
-    # TODO2:
-    # Implement method to stop duplicating tweet id-s,
-    # Add topic or keyword search information somewhere. 
 
     for scroll_round in range(max_scrolls):
         # check_for_errors(driver)
@@ -269,7 +296,7 @@ def scrape_twitter(query, max_scrolls=10, save_every=10):
         """
         
         # Run scrolling multiple random times before processing.
-        fast_scroll(driver, scroll_times=random.randint(2, 5))  
+        scroll(driver, scroll_steps=random.randint(10, 20), step_size=600, delay=2)
 
         tweets = driver.find_elements(By.XPATH, '//article[@data-testid="tweet"]')
         print(f"🔍 Scroll Batch {scroll_round+1}/{max_scrolls}: Found {len(tweets)} tweets on this page.")
@@ -277,6 +304,7 @@ def scrape_twitter(query, max_scrolls=10, save_every=10):
         for tweet in tweets:
             try:
                 scrape_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+                tweet_timestamp = tweet.find_element(By.XPATH, './/time').get_attribute("datetime")
 
                 # 🔹 Extract Tweet ID
                 try:
@@ -292,19 +320,16 @@ def scrape_twitter(query, max_scrolls=10, save_every=10):
                 # 🔹 Extract Author's Username & Profile Link
                 try:
                     author_element = tweet.find_element(By.XPATH, './/a[@role="link"]')
-                    author_profile_link = "https://x.com/" + author_element.get_attribute("href")
+                    author_profile_link = author_element.get_attribute("href")
                     author_username = author_profile_link.split("/")[-1]  # Extract username from URL
+                    author_visible_name = tweet.find_element(
+                        By.XPATH,
+                        './/a[@role="link"]//span[not(.//*)]'
+                    ).text
                 except Exception as e:
                     print(f"⚠️ Could not extract author details: {e}")
                     author_username = "Unknown"
                     author_profile_link = "N/A"
-
-                # 🔹 Updated: Check if author is verified (NEW METHOD)
-                #try:
-                #    tweet.find_element(By.XPATH, './/div[@data-testid="User-Name"]//svg[@data-testid="icon-verified"]')
-                #    is_verified = "Yes"
-                #except:
-                #    is_verified = "No"
 
                 # 🔹 Extract Tweet Text
                 try:
@@ -312,52 +337,30 @@ def scrape_twitter(query, max_scrolls=10, save_every=10):
                 except:
                     tweet_text = "No text available"
 
-                # 🔹 Extract Tweet Reactions (Likes, Retweets, Replies, Quotes, Views)
-                try:
-                    likes = tweet.find_element(By.XPATH, './/div[@data-testid="like"]').text
-                except:
-                    likes = "0"
-
-                try:
-                    retweets = tweet.find_element(By.XPATH, './/div[@data-testid="retweet"]').text
-                except:
-                    retweets = "0"
-
-                try:
-                    replies = tweet.find_element(By.XPATH, './/div[@data-testid="reply"]').text
-                except:
-                    replies = "0"
-
-                try:
-                    views = tweet.find_element(By.XPATH, './/div[@data-testid="view"]').text
-                except:
-                    views = "0"
-
-                try:
-                    quotes = tweet.find_element(By.XPATH, './/div[@data-testid="quote"]').text
-                except:
-                    quotes = "0"
-
                 # 🔹 Extract Multimedia (Images, Videos)
                 images = tweet.find_elements(By.XPATH, './/img[contains(@src, "twimg.com/media")]')
                 image_urls = [img.get_attribute("src") for img in images]
 
-                videos = tweet.find_elements(By.XPATH, './/video')
-                video_urls = [vid.get_attribute("src") for vid in videos]
+                # Enhanced video extraction:
+                video_urls = extract_video_urls(tweet)
+
+                # 🔹 Extract Tweet Reactions (Likes, Retweets, Replies, Quotes, Views)
+                # Extract tweet metrics
+                metrics = extract_tweet_metrics(tweet)
 
                 # 🔹 Append tweet data
                 tweets_data.append({
                     "Scrape Timestamp": scrape_timestamp,  # Add the timestamp
+                    "Tweet timestamp": tweet_timestamp,
                     "Tweet ID": tweet_id,
+                    "Visible name": author_visible_name,
                     "Author Username": author_username,
                     "Profile Link": author_profile_link,
-                    #"Verified": is_verified,
                     "Text": tweet_text,
-                    "Likes": likes,
-                    "Retweets": retweets,
-                    "Replies": replies,
-                    "Quotes": quotes,
-                    "Views": views,
+                    "Replies": metrics["Replies"],
+                    "Retweets": metrics["Reposts"],
+                    "Likes": metrics["Likes"],
+                    "Views": metrics["Views"],
                     "Images": ", ".join(image_urls) if image_urls else "No images",
                     "Videos": ", ".join(video_urls) if video_urls else "No videos"
                 })
@@ -385,5 +388,5 @@ def scrape_twitter(query, max_scrolls=10, save_every=10):
 
 # Run Scraper
 query = "deepseek"
-scrape_twitter(query, max_scrolls=10000000, save_every=5)
+scrape_twitter(query, max_scrolls=10000000, save_every=1)
 print(f"✅ Scraping completed. Results saved to: {OUTPUT_FILE}")
