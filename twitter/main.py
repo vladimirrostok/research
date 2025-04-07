@@ -19,8 +19,8 @@ TWITTER_PASSWORD = ""
 
 # 🔹 Set the output directory to the script's execution folder
 SCRIPT_DIRECTORY = os.path.dirname(os.path.abspath(__file__))  # Gets the folder where the script is executed
-OUTPUT_DIRECTORY = os.path.join(SCRIPT_DIRECTORY, "TwitterScraperResults")
-OUTPUT_FILE = os.path.join(OUTPUT_DIRECTORY, "feed.csv")
+OUTPUT_DIRECTORY = os.path.join(SCRIPT_DIRECTORY, "DeepSeek")
+OUTPUT_FILE = os.path.join(OUTPUT_DIRECTORY, "january.csv")
 # Ensure the output directory exists
 os.makedirs(OUTPUT_DIRECTORY, exist_ok=True)
 
@@ -265,12 +265,18 @@ def scrape_twitter(query, max_scrolls=10, save_every=5):
     twitter_login(driver) # 🔹 Log in to Twitter first
 
     # Open Twitter search page
-    search_url = f"https://x.com/home"
+    #search_url = f"https://x.com/home"
+    search_url = f"https://x.com/search?q=deepseek%20until%3A2025-01-31%20since%3A2025-01-01&src=typed_query&f=live"
+
+    
+
+
+
     driver.get(search_url)
     time.sleep(random.uniform(3, 8))  # Wait for page to load
 
     # 🔥 NEW STEP: Click on Following tab after login
-    click_following_tab(driver)
+    #click_following_tab(driver)
 
     # Start the function in a separate thread
     # Prevent javascript from sleeping by moving the mouse.
