@@ -3,6 +3,7 @@ import pandas as pd
 from telethon import TelegramClient
 from telethon.errors import FloodWaitError
 from telethon.tl.functions.channels import JoinChannelRequest
+import os
 
 # Telegram API credentials
 api_id = ""
@@ -12,6 +13,9 @@ phone_number = ""  # Your Telegram phone number
 client = TelegramClient("anon", api_id, api_hash)
 
 async def join_channel(client, channel):
+    """
+    Joins a given Telegram channel.
+    """
     try:
         await client(JoinChannelRequest(channel))
         print(f"Successfully joined {channel}")
@@ -19,6 +23,9 @@ async def join_channel(client, channel):
         print(f"Failed to join {channel}: {e}")
 
 async def get_entity(entity_name):
+    """
+    Returns the Telethon entity for the channel/user.
+    """
     try:
         entity = await client.get_entity(entity_name)
         print(f"Accessing {entity_name}")
@@ -28,6 +35,10 @@ async def get_entity(entity_name):
         return None
 
 def save_to_csv(channel, messages):
+    """
+    Saves a list of messages to a CSV file named after the channel.
+    Appends data if the file already exists.
+    """
     if not messages:
         return
 
@@ -75,13 +86,22 @@ def save_to_csv(channel, messages):
             "factcheck": message.factcheck,
         })
 
-    df = pd.DataFrame(data)
-    file_name = f"{"./data/"+channel.replace('https://t.me/', '')}_messages.csv"
+    # Make sure a directory exists for data, if desired
+    os.makedirs("./data", exist_ok=True)
 
-    df.to_csv(file_name, mode="a", header=not pd.io.common.file_exists(file_name), index=False)
+    # Generate a CSV file name, removing 'https://t.me/' or 't.me/' from the channel link
+    channel_name = channel.replace('https://t.me/', '').replace('t.me/', '')
+    file_name = f"./data/{channel_name}_messages.csv"
+
+    df = pd.DataFrame(data)
+    file_exists = os.path.exists(file_name)
+    df.to_csv(file_name, mode="a", header=not file_exists, index=False)
     print(f"Saved {len(messages)} messages to {file_name}")
 
 async def scrape_all_messages(client, channel, batch_size=500):
+    """
+    Iterates through all messages in a channel, saving them in batches.
+    """
     entity = await get_entity(channel)
     if not entity:
         print("Failed to retrieve entity. Exiting...")
@@ -96,79 +116,85 @@ async def scrape_all_messages(client, channel, batch_size=500):
                 messages.append(message)
 
             if not messages:
-                print("No more messages to scrape.")
+                print(f"No more messages to scrape for {channel}.")
                 break  # Exit loop if no messages are left
+
 
             last_message_id = messages[-1].id  # Update last processed message ID
             save_to_csv(channel, messages)
             await asyncio.sleep(1)  # Small delay to avoid rate limits
 
         except FloodWaitError as e:
-            print(f"Rate limit hit, sleeping for {e.seconds} seconds")
+            print(f"Rate limit hit for {channel}, sleeping for {e.seconds} seconds...")
             await asyncio.sleep(e.seconds)  # Async-friendly delay
         except Exception as e:
-            print(f"Error: {e}")
+            print(f"Error scraping {channel}: {e}")
             break  # Stop on unexpected errors
 
-# https://t.me/washingtonpost # The Washington Post
-# https://t.me/politico # Politico
-# https://t.me/politicoeurope # Politico Europe
-
-# List from https://tlgrm.eu/channels/news
-# ______
-# https://t.me/tuckercarlsonnetwork - Tucker Carlson Network
-# https://t.me/disclosetv - DiscloseTV
-# https://t.me/Govsg - gov.sg
-# https://t.me/TheBabylonBee - The Babylon Bee
-# https://t.me/intelslava - Intel Slava Z
-# https://t.me/Project_Veritas - Project Veritas
-# https://t.me/nytimes - The New York Times
-# https://t.me/bricsnews - BRICS News
-# https://t.me/insiderpaper - Insider Paper
-# https://t.me/WeTheMedia - We The Media
-# https://t.me/hnaftali - Hananya Naftali - Israel News
-# https://t.me/gatewaypunditofficial - Gateway Pundit
-# https://t.me/OANNTV - One America News Network
-# https://t.me/georgenews - GEORGENEWS
-# https://t.me/SGTnewsNetwork - Sergeant News Network 🇺🇸
-# https://t.me/WarMonitors - War Monitor
-# https://t.me/rtnews # RT News - Can't join this channel from Estonia
-# https://t.me/Breaking911 - Breaking911 
-# https://t.me/TommyRobinsonNews - Tommy Robinson News
-# https://t.me/police_frequency - Police frequency 
-# https://t.me/vertigo_world_news - Vertigo World News
-# https://t.me/WesternJournal - The Western Journal
-# https://t.me/NewsmaxTV - Newsmax Clips
-# https://t.me/epochtimes - The Epoch Times
-# https://t.me/infodefENGLAND - InfoDefenseENGLISH
-# https://t.me/Daily_Caller - Daily Caller  
-# https://t.me/realDailyWire - Daily Wire Junkies
-# https://t.me/WorldNews - World News [Breaking News]
-# https://t.me/NTDNews - NTD
-# https://t.me/trtworld - TRT World
-# https://t.me/europeandusanews - Global News (EU, USA)
-# https://t.me/kunuzen - Kun.uz English
-# X https://t.me/elsaltodiario - elsaltodiario.com 
-# https://t.me/notboring_riga - not boring → Riga
-# https://t.me/theIJR - Independent Journal Review
-# https://t.me/insidekonstantinsrussia - INSIDE RUSSIA
-# X https://t.me/belgorodskiy_kray - Белгородский Край ❤️ БК.
-# https://t.me/infoDefenseEn - IDpublicENG
-# https://t.me/uinhurricane - U In Hurricane [EN]
-# https://t.me/Ptpatriots - Prime Time Patriots
-# https://t.me/benjaminnorton - Ben Norton - independent news
-# https://t.me/JimmyHillReports - Jimmy Hill Reports △
-# https://t.me/cbondsglobal - Cbonds Global 
-# https://t.me/givebackourfreedom - John F. Kennedy
-# https://t.me/MidnightRiderChannel - Midnight Rider Channel 🇺🇲             
-# https://t.me/megatron_ron - megatron_ron
-
 async def main():
-    channel_link = "https://t.me/politicoeurope"
+    """
+    Main entry point:
+      1. Start the client
+      2. Loop through the list of channels
+      3. Join & scrape messages for each channel
+    """
+    channels = [
+        # https://t.me/washingtonpost # The Washington Post
+        # https://t.me/politico # Politico
+        # https://t.me/politicoeurope # Politico Europe
+        # https://t.me/tuckercarlsonnetwork - Tucker Carlson Network
+        # https://t.me/disclosetv - DiscloseTV
+        # https://t.me/Govsg - gov.sg
+        # https://t.me/TheBabylonBee - The Babylon Bee
+        # https://t.me/intelslava - Intel Slava Z
+        # https://t.me/Project_Veritas - Project Veritas
+        # https://t.me/nytimes - The New York Times
+        # https://t.me/bricsnews - BRICS News
+        # https://t.me/insiderpaper - Insider Paper
+        # https://t.me/WeTheMedia - We The Media
+        # https://t.me/hnaftali - Hananya Naftali - Israel News
+        # https://t.me/gatewaypunditofficial - Gateway Pundit
+        # https://t.me/OANNTV - One America News Network
+        # https://t.me/georgenews - GEORGENEWS
+        # https://t.me/SGTnewsNetwork - Sergeant News Network 🇺🇸
+        # https://t.me/WarMonitors - War Monitor
+        # https://t.me/rtnews # RT News - Can't join this channel from Estonia
+        # https://t.me/Breaking911 - Breaking911 
+        # https://t.me/TommyRobinsonNews - Tommy Robinson News
+        # https://t.me/police_frequency - Police frequency 
+        # https://t.me/vertigo_world_news - Vertigo World News
+        # https://t.me/WesternJournal - The Western Journal
+        # https://t.me/NewsmaxTV - Newsmax Clips
+        # https://t.me/epochtimes - The Epoch Times
+        # https://t.me/infodefENGLAND - InfoDefenseENGLISH
+        # https://t.me/Daily_Caller - Daily Caller  
+        # https://t.me/realDailyWire - Daily Wire Junkies
+        # https://t.me/WorldNews - World News [Breaking News]
+        # https://t.me/NTDNews - NTD
+        # https://t.me/trtworld - TRT World
+        # https://t.me/europeandusanews - Global News (EU, USA)
+        # https://t.me/kunuzen - Kun.uz English
+        # https://t.me/notboring_riga - not boring → Riga
+        # https://t.me/theIJR - Independent Journal Review
+        # https://t.me/insidekonstantinsrussia - INSIDE RUSSIA
+        # https://t.me/infoDefenseEn - IDpublicENG
+        # https://t.me/uinhurricane - U In Hurricane [EN]
+        # https://t.me/Ptpatriots - Prime Time Patriots
+        # https://t.me/benjaminnorton - Ben Norton - independent news
+        # https://t.me/JimmyHillReports - Jimmy Hill Reports △
+        # https://t.me/cbondsglobal - Cbonds Global 
+        # https://t.me/givebackourfreedom - John F. Kennedy
+        # https://t.me/MidnightRiderChannel - Midnight Rider Channel 🇺🇲             
+        # https://t.me/megatron_ron - megatron_ron
+    ]
 
     await client.start(phone_number)
-    await join_channel(client, channel_link)
-    await scrape_all_messages(client, channel_link)
+    
+    for channel_link in channels:
+        print(f"Processing channel: {channel_link}")
+        await join_channel(client, channel_link)
+        await scrape_all_messages(client, channel_link)
+        print(f"Finished scraping channel: {channel_link}\n")
 
 with client:
     client.loop.run_until_complete(main())
