@@ -1,1 +1,12 @@
-# research
+virtualenv venv -p python3
+source venv/bin/activate 
+which python
+python --version
+
+pip install pandas
+pip install telethon
+
+
+
+pip install playwright jmespath scrapfly-sdk
+
